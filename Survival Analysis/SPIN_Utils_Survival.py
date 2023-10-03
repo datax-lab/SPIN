@@ -14,7 +14,6 @@ import gc
 
 import torch.nn as nn
 import torch.nn.functional as F
-from Survival_CostFunc import neg_par_log_likelihood
 
 def load_sparse_indices(path):
 
