@@ -5,7 +5,7 @@ from datetime import datetime
 from sklearn.utils import class_weight
 
 from SPIN_Train_Risk import train_SPIN
-from SPIN_Utils import *
+from SPIN_Utils_Risk import *
 import os
 import warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
