@@ -1,6 +1,5 @@
 from SPIN_Model_Survival import SPIN
-from SPIN_Utils import *
-from Survival_CostFunc import *
+from SPIN_Utils_Survival import *
 from tqdm import tqdm
 
 import numpy as np
