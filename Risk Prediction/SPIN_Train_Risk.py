@@ -1,5 +1,5 @@
 from SPIN_Model_Risk import SPIN
-from SPIN_Utils import *
+from SPIN_Utils_Risk import *
 from tqdm import tqdm
 from sklearn.utils import class_weight
 
