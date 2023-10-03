@@ -2,7 +2,7 @@ import numpy as np
 import math
 import torch
 import torch.nn as nn
-from SPIN_Utils import fixed_s_mask
+from SPIN_Utils_Risk import fixed_s_mask
 
 class SPIN(nn.Module):
     def __init__(self, in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes, pathway_idx, initializer = "he_normal", activation = "Relu", dropout_Rates = .0):
