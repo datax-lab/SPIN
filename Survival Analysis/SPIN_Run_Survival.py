@@ -25,8 +25,8 @@ num = args.num
 data = args.data
 ###################################################################################################################################
 ### Set Load & Save path
-data_path = f"../../../../nasdatafolder/MTL/Data/TCGA_{data}/"
-save_path = f"../../../../nasdatafolder/MTL/SPIN/TCGA_{data}_Result/"
+data_path = '''Set the path to load the datasets'''
+save_path = '''Set the path to save files & results'''
 ###################################################################################################################################
 ### Load Pathway Mask
 ### Net setting
@@ -55,10 +55,10 @@ initializer = "he_uniform"
 activation = "Relu"
 dropout_Rates = 0.7
 optimizer = "Adam"
-opt_lr = 1e-5
-opt_wd = 9.9e-1
-lr_factor = 0.99
-lr_patience = 1
+opt_lr = '''Set the optimal learning rate'''
+opt_wd = '''Set the optimal weight decay'''
+lr_factor = '''Set the learning rate scheduler factor'''
+lr_patience = '''Set the learning rate scheduler patientce'''
 step = 10
 n_experiments = 10
 n_epoch = 5000
