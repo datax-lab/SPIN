@@ -15,7 +15,7 @@ def train_SPIN(date, num, data, experiment, train_x, train_y, val_x, val_y, test
                learning_rate, weight_decay, lr_factor, lr_patience, n_epochs, 
                step = 1, optimizer = "Adam", learning_rate_scheduler = False):
     ### set save path
-    save_path = f"../../../nasdatafolder/MTL/SPIN/GSE_{data}_Result/"
+    save_path = '''Set the path to save files & results'''
     net = SPIN(in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes, pathway_indices, initializer, activation, dropout_Rates)
     if torch.cuda.is_available():
         net.cuda()
