@@ -5,7 +5,7 @@ from datetime import datetime
 from sklearn.utils import class_weight
 
 from SPIN_Train_Risk import train_SPIN
-from SPIN_Utils_Risk import *
+from SPIN_Utils import *
 import os
 import warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
@@ -26,8 +26,8 @@ num = args.num
 data = args.data
 ###################################################################################################################################
 ### Set Load & Save path
-data_path = f"../../../nasdatafolder/MTL/Data/GSE_{data}_KEGG_Genes/"
-save_path = f"../../../nasdatafolder/MTL/SPIN/GSE_{data}_Result/"
+data_path = '''Set the path to load the datasets'''
+save_path = '''Set the path to save files & results'''
 ###################################################################################################################################
 ### Load Pathway Mask
 ### Net setting
@@ -47,13 +47,13 @@ initializer = "he_uniform"
 activation = "Relu"
 dropout_Rates = 0.7
 optimizer = "Adam"
-opt_lr = 7e-5
-opt_wd = 9.9e-1
-lr_factor = 0.99
-lr_patience = 1
+opt_lr = '''Set the optimal learning rate'''
+opt_wd = '''Set the optimal weight decay'''
+lr_factor = '''Set the learning rate scheduler factor'''
+lr_patience = '''Set the learning rate scheduler patientce'''
 step = 10
 n_experiments = 10
-n_epoch = 5000
+n_epoch = '''Set the epochs'''
 ###################################################################################################################################
 ### Record Settings
 record = open(save_path + f"Result/[{date}_{num}]_SPIN_[GSE{data}]_Result.txt", 'a+')
@@ -69,12 +69,12 @@ test_auc_list = []
 for experiment in range(1, n_experiments + 1):
     print("#######################  %d experiment  #######################\n" % experiment)
     ### load train & validation & test data and label
-    trainData = pd.read_csv(data_path + f"Normed_Train_Data_{experiment}.csv")
-    trainLabel = pd.read_csv(data_path + f"Normed_Train_Label_{experiment}.csv")
-    valData = pd.read_csv(data_path + f"Normed_Valid_Data_{experiment}.csv")
-    valLabel = pd.read_csv(data_path + f"Normed_Valid_Label_{experiment}.csv")
-    testData = pd.read_csv(data_path + f"Normed_Test_Data_{experiment}.csv")
-    testLabel = pd.read_csv(data_path + f"Normed_Test_Label_{experiment}.csv")
+    trainData = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Train_Data_{experiment}.csv")
+    trainLabel = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Train_Label_{experiment}.csv")
+    valData = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Valid_Data_{experiment}.csv")
+    valLabel = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Valid_Label_{experiment}.csv")
+    testData = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Test_Data_{experiment}.csv")
+    testLabel = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Test_Label_{experiment}.csv")
     ### Load data on GPU
     x_train = torch.from_numpy(trainData.values).to(dtype=torch.float).cuda()
     y_train = torch.from_numpy(trainLabel.values).to(dtype=torch.float).cuda()
