@@ -75,16 +75,9 @@ for experiment in range(1, n_experiments + 1):
     valLabel = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Valid_Label_{experiment}.csv")
     testData = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Test_Data_{experiment}.csv")
     testLabel = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Test_Label_{experiment}.csv")
-    ### Load data on GPU
-    x_train = torch.from_numpy(trainData.values).to(dtype=torch.float).cuda()
-    y_train = torch.from_numpy(trainLabel.values).to(dtype=torch.float).cuda()
-    x_valid = torch.from_numpy(valData.values).to(dtype=torch.float).cuda()
-    y_valid = torch.from_numpy(valLabel.values).to(dtype=torch.float).cuda()
-    x_test = torch.from_numpy(testData.values).to(dtype=torch.float).cuda()
-    y_test = torch.from_numpy(testLabel.values).to(dtype=torch.float).cuda()
 ###################################################################################################################################
     torch.cuda.empty_cache()
-    test_auc = train_SPIN(date, num, data, experiment, train_x, train_y, valid_x, valid_y, test_x, test_y,
+    test_auc = train_SPIN(date, num, data, experiment, trainData, trainLabel, valData, valLabel, testData, testLabel,
                           pathway_indices, in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes, dropout_Rates, initializer,
                           activation, opt_lr, opt_wd, lr_factor, lr_patience, n_epoch, 
                           step = step, optimizer = optimizer, learning_rate_scheduler = True)
