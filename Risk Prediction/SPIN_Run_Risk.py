@@ -33,49 +33,32 @@ save_path = '''Set the path to save files & results'''
 ### Net setting
 if data == "8052":
     in_Nodes = 4394
-    pathway_indices = load_sparse_indices(data_path + f"Asthma_GSE_{data}_Gene_KEGG_Mask.npz")
+    pathway_idx = load_sparse_indices("Load Pathway Mask")
 elif data == "172367":
     in_Nodes = 3019
-    pathway_indices = load_sparse_indices(data_path + f"Asthma_GSE_{data}_Gene_KEGG_Mask.npz")
-    
+    pathway_idx = load_sparse_indices("Load Pathway Mask")    
 pathway_Nodes = 173
 hidden_Nodes = 100
 out_Nodes = 1
 ###################################################################################################################################
-### Initialize Settings
-initializer = "he_uniform"
-activation = "Relu"
-dropout_Rates = 0.7
-optimizer = "Adam"
-opt_lr = '''Set the optimal learning rate'''
-opt_wd = '''Set the optimal weight decay'''
-lr_factor = '''Set the learning rate scheduler factor'''
-lr_patience = '''Set the learning rate scheduler patientce'''
-step = 10
-n_experiments = 10
-n_epoch = '''Set the epochs'''
-###################################################################################################################################
-### Record Settings
-record = open(save_path + f"Result/[{date}_{num}]_SPIN_[GSE{data}]_Result.txt", 'a+')
-record.write("Input Nodes: %d\t\tPathway Nodes: %d\t\tHidden Nodes: %s\t\tOutput Nodes: %d\r\n" % (in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes))
-record.write("Initializer: %s\t\tActivation: %s\t\tDropout Rates: %s\t\tOptimizer: %s\r\n" % (initializer, activation, str(dropout_Rates), optimizer))
-record.write("Init LR: %s\t\tWeight Decay: %s\r\n" % (opt_lr, opt_wd))
-record.write("Epoch: %d\t\tStep Size: %d\r\n" % (eval_epoch, step))
-record.write("LR Factor: %s\t\tLR Patience: %s\r\n" % (lr_factor, lr_patience))
-record.close()
+### Optimal Hyperparams Settings
+### Obtained from HyperParams_Optimization.py
+net_hparams = [in_Nodes, [pathway_Nodes, hidden_Nodes], out_Nodes, args.init, args.act, args.dr] ### 0-input_nodes, 1-hidden_nodes, 2-output_nodes, 3-initializer, 4-activation, 5-dropout
+optim_hparams = [args.opt, args.lr, args.fac, 5, args.wd] ### 0-optimizer, 1-lr, 2-lr_factor, 3-lr_patience, 4-weight_decay
+experim_hparms = [100, args.btch] ### 0-max_epoch, 1-batch_size
 ###################################################################################################################################
 ### Start SPIN
 test_auc_list = []
 for experiment in range(1, n_experiments + 1):
     print("#######################  %d experiment  #######################\n" % experiment)
     ### load train & validation & test data and label
-    trainData = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Train_Data_{experiment}.csv")
-    trainLabel = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Train_Label_{experiment}.csv")
-    valData = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Valid_Data_{experiment}.csv")
-    valLabel = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Valid_Label_{experiment}.csv")
-    testData = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Test_Data_{experiment}.csv")
-    testLabel = pd.read_csv(data_path + f"[GSE{asthma_data}]Entire_Normed_Test_Label_{experiment}.csv")
-###################################################################################################################################
+    trainData = pd.read_csv("Load Train Data")
+    trainLabel = pd.read_csv("Load Train Label")
+    validData = pd.read_csv("Load Valid Data")
+    validLabel = pd.read_csv("Load Valid Label")
+    testData = pd.read_csv("Load Test Data")
+    testLabel = pd.read_csv("Load Test Label")
+    ###################################################################################################################################
     torch.cuda.empty_cache()
     test_auc = train_SPIN(date, num, data, experiment, trainData, trainLabel, valData, valLabel, testData, testLabel,
                           pathway_indices, in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes, dropout_Rates, initializer,
