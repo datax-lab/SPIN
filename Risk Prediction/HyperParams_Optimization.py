@@ -10,7 +10,7 @@ from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
 import ray.cloudpickle as pickle
 
-from Model_Race_GroupNN import Model
+from SPIN_Model_Risk import SPIN
 from Utils import *
 from tqdm import tqdm
 from sklearn.utils import class_weight
@@ -28,14 +28,7 @@ warnings.filterwarnings('ignore')
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
 
-parser = argparse.ArgumentParser()
-# parser.add_argument("--num", type = int, help = "The project number", required=True)
-parser.add_argument("--state", type = str, help = "State", required=True)
-args = parser.parse_args()
-
 date = datetime.today().strftime('%m%d')
-# num = args.num
-state = args.state
 
 class Load_Dataset(Dataset):
     def __init__(self, data, label, weight):
