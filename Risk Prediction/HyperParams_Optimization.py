@@ -23,11 +23,19 @@ import torch.optim as optim
 
 import argparse
 import warnings
+
+arser = argparse.ArgumentParser()
+parser.add_argument("--gpu", type = str, help = "GPU number", required = True)
+parser.add_argument("--data", type = str, help = "Data name", required = True)
+args = parser.parse_args()
+
+### GPU assign
 warnings.filterwarnings('ignore')
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
 date = datetime.today().strftime('%m%d')
+data = args.data
 
 class Load_Dataset(Dataset):
     def __init__(self, data, label, weight):
