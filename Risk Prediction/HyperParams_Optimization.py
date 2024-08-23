@@ -16,7 +16,6 @@ from tqdm import tqdm
 from sklearn.utils import class_weight
 from datetime import datetime
 from torch.utils.data import Dataset, DataLoader
-from torch.autograd import Variable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -42,33 +41,32 @@ class Load_Dataset(Dataset):
     def __getitem__(self, idx):
         return torch.FloatTensor(self.data.iloc[idx]).cuda(), torch.FloatTensor(self.label.iloc[idx]).cuda(), torch.FloatTensor(self.weight.iloc[idx]).cuda()
 
-def train_Race_GroupNN(config):
+def train_SPIN(config):
     n_experiments = 1
-    net_hparams = [23, [11, 10], 1, "", config['Activation'], config['Dropout']] ### 0-input_nodes, 1-hidden_nodes, 2-output_nodes, 3-initializer, 4-activation, 5-dropout
+    ### Net setting
+    if data == "8052":
+        in_Nodes = 4394
+        pathway_idx = load_sparse_indices("Load Pathway Mask")
+    elif data == "172367":
+        in_Nodes = 3019
+        pathway_idx = load_sparse_indices("Load Pathway Mask")
+    net_hparams = [in_Nodes, [173, 100], 1, config['Initializer'], config['Activation'], config['Dropout']] ### 0-input_nodes, 1-hidden_nodes, 2-output_nodes, 3-initializer, 4-activation, 5-dropout
     optim_hparams = ["Adam", config['LR'], config['LR_Factor'], config['LR_Patience'], config['Weight_Decay']] ### 0-optimizer, 1-lr, 2-lr_factor, 3-lr_patience, 4-weight_decay
     experim_hparms = [100, 2**8] ### 0-max_epoch, 1-batch_size
-    sparse_indices = load_sparse_indices("/home/koe3/CMS/Data/Mask_Group_Var_withoutRace.npz")
-    model_path = f"/home/koe3/CMS/{state}_Result/GroupNN/Saved_Model/"
     for experiment in range(1, n_experiments + 1):
         print("#######################  %d experiment  #######################\n" % experiment)
-        ### load pretrained model
-        pretrained_model = torch.load(model_path + f"[0314_1]_[{experiment}]Opt_Model.pt")
-        ### each dataset includes race information
-        ### the race information placed on the last column
-        ### 1-White, 2-Black, 3-Hispanic, 4-Asian, 5-Other
-        trainData = pd.read_csv(f"/home/koe3/CMS/Data/[0307]{state}_SIDC_CORE_Normed_Train_Data_{experiment}.csv")
-        trainLabel = pd.read_csv(f"/home/koe3/CMS/Data/[0307]{state}_SIDC_CORE_Normed_Train_Label_{experiment}.csv")
-        validData = pd.read_csv(f"/home/koe3/CMS/Data/[0307]{state}_SIDC_CORE_Normed_Valid_Data_{experiment}.csv")
-        validLabel = pd.read_csv(f"/home/koe3/CMS/Data/[0307]{state}_SIDC_CORE_Normed_Valid_Label_{experiment}.csv")
-        # testData = pd.read_csv(f"../Data/[0307]{state}_SIDC_CORE_Normed_Test_Data_{experiment}.csv")
-        # testLabel = pd.read_csv(f"../Data/[0307]{state}_SIDC_CORE_Normed_Test_Label_{experiment}.csv")
+        ### load train & validation & test data and label
+        trainData = pd.read_csv("Load Train Data")
+        trainLabel = pd.read_csv("Load Train Label")
+        validData = pd.read_csv("Load Valid Data")
+        validLabel = pd.read_csv("Load Valid Label")
         ###############################################################################################################################################
         train_sample_weight = pd.DataFrame(class_weight.compute_sample_weight('balanced', trainLabel.values.ravel()))
         valid_sample_weight = pd.DataFrame(class_weight.compute_sample_weight('balanced', validLabel.values.ravel()))
         train_dataloader = DataLoader(Load_Dataset(trainData, trainLabel, train_sample_weight), batch_size = experim_hparms[1], shuffle = False)
         valid_dataloader = DataLoader(Load_Dataset(validData, validLabel, valid_sample_weight), batch_size = experim_hparms[1], shuffle = False)
         ###############################################################################################################################################
-        net = Model(pretrained_model, net_hparams, sparse_indices)
+        net = SPIN(net_hparams, pathway_idx)
         if torch.cuda.is_available():
             net.cuda()
         ### Optimizer Setting
@@ -88,33 +86,19 @@ def train_Race_GroupNN(config):
             net.train()
             train_step_loss = []
             for train_x, train_y, train_w in train_dataloader:
-                ### train on each race
-                # for race in train_x[:, -1].unique():
-                #     train_race_idx = (train_x[:, -1] == race).nonzero(as_tuple=True)
-                #     train_race_x = train_x[train_race_idx]
-                #     train_race_y = train_y[train_race_idx]
-                #     train_race_w = train_w[train_race_idx]
                 ### forward
-                # train_pred = net(train_race_x)
                 train_pred, train_label, train_weight = net(train_x, train_y, train_w)
                 ### calculate loss
                 loss = F.binary_cross_entropy(train_pred, train_label, weight = train_weight)
-                # train_batch_loss_list.append(train_loss.cpu().detach().numpy())
                 ### reset gradients to zeros
                 opt.zero_grad()
                 ### calculate gradients
                 loss.backward()
                 ### force the connections between gene layer and pathway layer w.r.t. 'pathway_mask'
-                if net.layer1_white.weight.grad is not None:
-                    net.layer1_white.weight.data = fixed_s_mask(net.layer1_white.weight.data, sparse_indices)
-                if net.layer1_black.weight.grad is not None:
-                    net.layer1_black.weight.data = fixed_s_mask(net.layer1_black.weight.data, sparse_indices)
-                if net.layer1_hispanic.weight.grad is not None:
-                    net.layer1_hispanic.weight.data = fixed_s_mask(net.layer1_hispanic.weight.data, sparse_indices)
-                if net.layer1_asian.weight.grad is not None:
-                    net.layer1_asian.weight.data = fixed_s_mask(net.layer1_asian.weight.data, sparse_indices)
-                if net.layer1_other.weight.grad is not None:
-                    net.layer1_other.weight.data = fixed_s_mask(net.layer1_other.weight.data, sparse_indices)
+                if net.layer1_female.weight.grad is not None:
+                    net.layer1_female.weight.grad = fixed_s_mask(net.layer1_female.weight.grad, pathway_indices)
+                if net.layer1_male.weight.grad is not None:
+                    net.layer1_male.weight.grad = fixed_s_mask(net.layer1_male.weight.grad, pathway_indices)
                 ### update weights and biases
                 opt.step()
                 ### append train loss per step
@@ -142,6 +126,7 @@ config = {
     "LR_Factor": tune.uniform(0, 1),
     "LR_Patience": tune.choice([5, 10, 20, 30]),
     "Activation": tune.choice(["sigmoid", "tanh", "relu", "lkrelu"]),
+    "Initializer": tune.choice(["he_normal", "he_uniform", "xavier_normal", "xavier_uniform"]),
     "Weight_Decay": tune.uniform(0, 1e-1)
 }
 
@@ -154,14 +139,10 @@ scheduler = ASHAScheduler(
     reduction_factor=2,
 )
 
-# first_config = {'Dropout': 0.06484167717898467, 'GridSize': 3, 'KANLayers': 0, 'KANMHA': 0, 'KANSize1': 64, 'KANSize2': 256, 'KANSize3': 16, 'Lr': 0.00023036437005511046, 'SplineOrder': 3}
-
-search_alg = OptunaSearch(metric="Validation loss", mode="min")#, points_to_evaluate=[first_config])
-
-#search_alg = OptunaSearch(metric="Validation loss", mode="min")
+search_alg = OptunaSearch(metric="Validation loss", mode="min")
     
 result = tune.run(
-    train_Race_GroupNN,
+    train_SPIN,
     config=config,
     resources_per_trial={"cpu": 4, "gpu": 1},
     num_samples=500,
@@ -173,4 +154,3 @@ result = tune.run(
 best_trial = result.get_best_trial("Validation loss", "min", "last")
 print(f"Best trial config: {best_trial.config}")
 print(f"Best trial final validation loss: {best_trial.last_result['Validation loss']}")
-# result.results_df.to_csv(f"")
