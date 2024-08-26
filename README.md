@@ -8,3 +8,7 @@ Sex differences in prevalence, severity, and genetic susceptibility exist for mo
 
 - **Source code**: https://github.com/datax-lab/SPIN
 
+Published in
+Briefings in Bioinformatics, July 2024, https://doi.org/10.1093/bib/bbae239
+
+
