@@ -10,13 +10,10 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
-def train_SPIN(date, num, data, experiment, train_x, train_y, val_x, val_y, test_x, test_y, pathway_indices,
-               in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes, dropout_Rates, initializer, activation,
-               learning_rate, weight_decay, lr_factor, lr_patience, n_epochs, 
-               step = 1, optimizer = "Adam", learning_rate_scheduler = False):
+def train_SPIN(date, num, data, experiment, train_x, train_y, valid_x, valid_y, test_x, test_y, pathway_indices, net_hparams, optim_hparams, experim_hparms):
     ### set save path
     save_path = '''Set the path to save files & results'''
-    net = SPIN(in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes, pathway_indices, initializer, activation, dropout_Rates)
+    net = SPIN(net_hparams, pathway_indices)
     if torch.cuda.is_available():
         net.cuda()
 
