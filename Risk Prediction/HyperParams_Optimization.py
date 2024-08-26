@@ -49,7 +49,7 @@ class Load_Dataset(Dataset):
     def __getitem__(self, idx):
         return torch.FloatTensor(self.data.iloc[idx]).cuda(), torch.FloatTensor(self.label.iloc[idx]).cuda(), torch.FloatTensor(self.weight.iloc[idx]).cuda()
 
-def train_SPIN(config):
+def train_SPIN_RISK(config):
     n_experiments = 1
     ### Net setting
     if data == "8052":
@@ -86,8 +86,7 @@ def train_SPIN(config):
         elif optim_hparams[0] == "AdamW":
             opt = optim.AdamW(net.parameters(), lr = optim_hparams[1], betas = (0.99, 0.999), eps = 1e-8, weight_decay = optim_hparams[4], amsgrad = True)
         ### Learning scheduler
-        if optim_hparams[2]:
-            scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', factor = optim_hparams[2], patience = optim_hparams[3])
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', factor = optim_hparams[2], patience = optim_hparams[3])
     ###############################################################################################################################################
         for epoch in range(1, experim_hparms[0] + 1):
             torch.cuda.empty_cache()
@@ -150,7 +149,7 @@ scheduler = ASHAScheduler(
 search_alg = OptunaSearch(metric="Validation loss", mode="min")
     
 result = tune.run(
-    train_SPIN,
+    train_SPIN_RISK,
     config=config,
     resources_per_trial={"cpu": 4, "gpu": 1},
     num_samples=500,
