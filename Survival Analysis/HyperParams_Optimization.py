@@ -11,9 +11,8 @@ from ray.tune.search.optuna import OptunaSearch
 import ray.cloudpickle as pickle
 
 from DataLoader import load_data, load_sparse_indices
-from Survival_CostFunc import neg_par_log_likelihood, c_index
-from SPIN_Model_Risk import SPIN
-from Utils import *
+from SPIN_Utils_Survival import *
+from SPIN_Model_Survival import SPIN
 from tqdm import tqdm
 from datetime import datetime
 from torch.utils.data import Dataset, DataLoader
@@ -26,6 +25,7 @@ import argparse
 arser = argparse.ArgumentParser()
 parser.add_argument("--gpu", type = str, help = "GPU number", required = True)
 parser.add_argument("--data", type = str, help = "Data name", required = True)
+parser.add_argument("--epoch", type = int, help = "Epoch Size", required=True)
 parser.add_argument("--btch", type = int, help = "Batch Size", required=True)
 args = parser.parse_args()
 
@@ -50,7 +50,7 @@ class Load_Dataset(Dataset):
     def __getitem__(self, idx):
         return torch.FloatTensor(self.data.iloc[idx]).cuda(), torch.FloatTensor(self.event.iloc[idx]).cuda(), torch.FloatTensor(self.time.iloc[idx]).cuda()
 
-def train_SPIN(config):
+def train_SPIN_Survival(config):
     n_experiments = 1
     ### Net setting
     ### Number of genes
@@ -72,7 +72,7 @@ def train_SPIN(config):
     
     net_hparams = [in_Nodes, [173, 100], 1, config['Initializer'], config['Activation'], config['Dropout']] ### 0-input_nodes, 1-hidden_nodes, 2-output_nodes, 3-initializer, 4-activation, 5-dropout
     optim_hparams = ["Adam", config['LR'], config['LR_Factor'], config['LR_Patience'], config['Weight_Decay']] ### 0-optimizer, 1-lr, 2-lr_factor, 3-lr_patience, 4-weight_decay
-    experim_hparms = [100, args.btch] ### 0-max_epoch, 1-batch_size
+    experim_hparms = [args.epoch, args.btch] ### 0-max_epoch, 1-batch_size
     for experiment in range(1, n_experiments + 1):
         print("#######################  %d experiment  #######################\n" % experiment)
         ### load train & validation & test data and label
@@ -157,7 +157,7 @@ scheduler = ASHAScheduler(
 search_alg = OptunaSearch(metric="Validation loss", mode="min")
     
 result = tune.run(
-    train_SPIN,
+    train_SPIN_Survival,
     config=config,
     resources_per_trial={"cpu": 4, "gpu": 1},
     num_samples=500,
