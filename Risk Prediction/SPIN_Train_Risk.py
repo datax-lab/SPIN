@@ -6,129 +6,117 @@ from sklearn.utils import class_weight
 import numpy as np
 import pandas as pd
 import copy
+
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
 
-def train_SPIN(date, num, data, experiment, train_x, train_y, valid_x, valid_y, test_x, test_y, pathway_indices, net_hparams, optim_hparams, experim_hparms):
+class Load_Dataset(Dataset):
+    def __init__(self, data, label, weight):
+        self.data = data
+        self.label = label
+        self.weight = weight
+
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        return torch.FloatTensor(self.data.iloc[idx]).cuda(), torch.FloatTensor(self.label.iloc[idx]).cuda(), torch.FloatTensor(self.weight.iloc[idx]).cuda()
+
+def train_SPIN(date, num, data, experiment, trainData, trainLabel, validData, validLabel, testData, testLabel, pathway_idx, net_hparams, optim_hparams, experim_hparms):
     ### set save path
     save_path = '''Set the path to save files & results'''
-    net = SPIN(net_hparams, pathway_indices)
+    net = SPIN(net_hparams, pathway_idx)
     if torch.cuda.is_available():
         net.cuda()
-
     ### Optimizer Setting
-    if optimizer == "SGD":
-        opt = optim.SGD(net.parameters(), lr = learning_rate, weight_decay = weight_decay, nesterov = True)
-    elif optimizer == "Adam":
-        opt = optim.Adam(net.parameters(), lr = learning_rate, weight_decay = weight_decay, amsgrad = True)
-    elif optimizer == "AdamW":
-        opt = optim.AdamW(net.parameters(), lr = learning_rate, weight_decay = weight_decay, amsgrad = True)
-        
-    if learning_rate_scheduler:
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', factor = lr_factor, patience = lr_patience)
-###################################################################################################################################
+    ### 0-optimizer, 1-lr, 2-lr_scheduler, 3-lr_factor, 4-lr_patience
+    if optim_hparams[0] == "SGD":
+        opt = optim.SGD(net.parameters(), lr = optim_hparams[1], momentum = 1e-1, dampening = 0, weight_decay = optim_hparams[4], nesterov = True)
+    elif optim_hparams[0] == "Adam":
+        opt = optim.Adam(net.parameters(), lr = optim_hparams[1], betas = (0.99, 0.999), eps = 1e-8, weight_decay = optim_hparams[4], amsgrad = True)
+    elif optim_hparams[0] == "AdamW":
+        opt = optim.AdamW(net.parameters(), lr = optim_hparams[1], betas = (0.99, 0.999), eps = 1e-8, weight_decay = optim_hparams[4], amsgrad = True)
+    ### Learning scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', factor = optim_hparams[2], patience = optim_hparams[3])
+    ###############################################################################################################################################
+    ### Compute sample weight
+    train_sample_weight = pd.DataFrame(class_weight.compute_sample_weight('balanced', trainLabel.values.ravel()))
+    valid_sample_weight = pd.DataFrame(class_weight.compute_sample_weight('balanced', validLabel.values.ravel()))
+    ### Load Dataset
+    train_dataloader = DataLoader(Load_Dataset(trainData, trainLabel, train_sample_weight), batch_size = experim_hparms[1], shuffle = False)
+    valid_dataloader = DataLoader(Load_Dataset(validData, validLabel, valid_sample_weight), batch_size = experim_hparms[1], shuffle = False)
+    ###############################################################################################################################################
     train_loss_list = []
     val_loss_list = []
     train_auc_list = []
     val_auc_list = []
     layer2_sp_level_during_epoch = []
-    best_val_auc = 0.
-    best_val_loss = torch.tensor(float('inf'))
-    ### compute sample weight
-    train_sample_weight = class_weight.compute_sample_weight('balanced', train_y.cpu().detach().numpy().ravel())
-    val_sample_weight = class_weight.compute_sample_weight('balanced', val_y.cpu().detach().numpy().ravel())
-    gpu_train_sample_weight = torch.tensor(train_sample_weight).reshape(-1,1).cuda()
-    gpu_val_sample_weight = torch.tensor(val_sample_weight).reshape(-1,1).cuda()
-###################################################################################################################################
-    for epoch in tqdm(range(1, n_epochs + 1)):
+    ###################################################################################################################################
+    for epoch in range(1, experim_hparms[0] + 1):
         torch.cuda.empty_cache()
         net.train()
-        ### forward
-        pred = net(train_x)
-        ### calculate loss
-        loss = F.binary_cross_entropy(pred, train_y, weight = gpu_train_sample_weight)
-        ### reset gradients to zeros
-        opt.zero_grad()
-        ### calculate gradients
-        loss.backward()
-        ### force the connections between gene layer and pathway layer w.r.t. 'pathway_mask'
-        if net.layer1_female.weight.grad is not None:
-            net.layer1_female.weight.grad = fixed_s_mask(net.layer1_female.weight.grad, pathway_indices)
-        if net.layer1_male.weight.grad is not None:
-            net.layer1_male.weight.grad = fixed_s_mask(net.layer1_male.weight.grad, pathway_indices)
-        ### update weights and biases
-        opt.step()
-###################################################################################################################################
+        train_step_loss = []
+        for train_x, train_y, train_w in train_dataloader:
+            ### forward
+            train_pred, train_label, train_weight = net(train_x, train_y, train_w)
+            ### calculate loss
+            loss = F.binary_cross_entropy(train_pred, train_label, weight = train_weight)
+            ### reset gradients to zeros
+            opt.zero_grad()
+            ### calculate gradients
+            loss.backward()
+            ### force the connections between gene layer and pathway layer w.r.t. 'pathway_mask'
+            if net.layer1_female.weight.grad is not None:
+                net.layer1_female.weight.grad = fixed_s_mask(net.layer1_female.weight.grad, pathway_idx)
+            if net.layer1_male.weight.grad is not None:
+                net.layer1_male.weight.grad = fixed_s_mask(net.layer1_male.weight.grad, pathway_idx)
+            ### update weights and biases
+            opt.step()
+            ### append train loss per step
+            train_step_loss.append(loss.item())
+        ###################################################################################################################################
+        train_loss = np.mean(train_step_loss)
         ### sparse network - prunning connections
-        net, sp_level_list = sparse_func_risk(net, train_x, train_y)
+        net, sp_level_list = sparse_func_risk(net, train_dataloader)
         layer2_sp_level_during_epoch.append(sp_level_list[0][1])
         del sp_level_list
         gc.collect()
-        
-        if epoch % step == 0:
-            torch.cuda.empty_cache()
-            net.train()
-            train_pred = net(train_x)
-            train_loss = F.binary_cross_entropy(train_pred, train_y, weight = gpu_train_sample_weight)
-            train_loss_list.append(train_loss.cpu().detach().numpy())
-            train_auc = auc(train_y, train_pred)
-            train_auc_list.append(train_auc)
-###################################################################################################################################
-            net.eval()
-            ### validation data
-            with torch.no_grad():
-                val_pred = net(val_x)
-                val_loss = F.binary_cross_entropy(val_pred, val_y, weight = gpu_val_sample_weight)
-                val_loss_list.append(val_loss.cpu().detach().numpy())
-                val_auc = auc(val_y, val_pred)
-                val_auc_list.append(val_auc)
-###################################################################################################################################
-            ### adjust learning rate based on validation loss
-            if learning_rate_scheduler:
-                scheduler.step(val_loss)            
-            ### update best auc and ratio at best auc
-            if best_val_auc < val_auc:
-                best_val_auc = val_auc
-                best_val_auc_epoch = epoch
-                
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_val_loss_epoch = epoch
-                val_auc_at_best_val_loss = val_auc
-                opt_net = copy.deepcopy(net)                
-                print("[%d] Train Loss in [%d]: %.4f" % (experiment, epoch, train_loss))
-                print("[%d] Valid Loss in [%d]: %.4f" % (experiment, epoch, val_loss))
-                print("[%d] Train AUC in [%d]: %.3f" % (experiment, epoch, train_auc))
-                print("[%d] Valid AUC in [%d]: %.3f" % (experiment, epoch, val_auc))
-                print("[%d] Best Valid AUC in [%d]: %.3f" % (experiment, best_val_auc_epoch, best_val_auc))
-            else:
-                print("[%d] Train Loss in [%d]: %.4f" % (experiment, epoch, train_loss))
-                print("[%d] Valid Loss in [%d]: %.4f" % (experiment, epoch, val_loss))
-                print("[%d] Train AUC in [%d]: %.3f" % (experiment, epoch, train_auc))
-                print("[%d] Valid AUC in [%d]: %.3f" % (experiment, epoch, val_auc))
-                print("[%d] Best Valid Loss in [%d]: %.4f" % (experiment, best_val_loss_epoch, best_val_loss))
-                print("[%d] Valid AUC at Best Valid Loss in [%d]: %.3f" % (experiment, best_val_loss_epoch, val_auc_at_best_val_loss))
-                print("[%d] Best Valid AUC in [%d]: %.3f" % (experiment, best_val_auc_epoch, best_val_auc))
-                
-            del train_pred, val_pred, train_loss, val_loss
-            del train_auc, val_auc
-            gc.collect()
+        ###################################################################################################################################
+        net.eval()
+        ### validation data
+        valid_loss = 0
+        with torch.no_grad():
+            for valid_x, valid_y, valid_w in valid_dataloader:
+                valid_pred, valid_label, valid_weight = net(valid_x, valid_y, valid_w)
+                valid_loss += F.binary_cross_entropy(valid_pred, valid_label, weight = valid_weight).item()
+        valid_loss /= len(valid_dataloader)
+        ### adjust learning rate based on validation loss
+        scheduler.step(valid_loss)
+        ### save the optimal model at the best validation loss
+        best_valid_loss = float("inf")
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            opt_net = copy.deepcopy(net)
             
-    torch.save(opt_net, save_path + f"Saved_Model/[{date}_{num}]_[{experiment}]_Opt_Model.pt")
-############################################################## Test ##############################################################
+    torch.save(opt_net, f"[{date}_{num}]_[{experiment}]Save_Opt_Model")
+    ############################################################## Test ##############################################################
+    test_sample_weight = pd.DataFrame(class_weight.compute_sample_weight('balanced', testLabel.values.ravel()))
+    test_dataloader = DataLoader(Load_Dataset(testData, testLabel, test_sample_weight), batch_size = experim_hparms[3], shuffle = False)
     opt_net.eval()
-    final_pred = opt_net(test_x)
-    final_auc = auc(test_y, final_pred)
-    ### save ground truth & prediction of test data
-    pd.DataFrame(np.concatenate(([final_pred.cpu().detach().numpy().ravel()], [test_y.cpu().detach().numpy().ravel()]), axis = 0).T).to_csv(save_path + f"Pred_&_Truth/[{date}_{num}]_[{experiment}]_SPIN_Pred_Truth.csv", index = False)
-###################################################################################################################################
-    ### plot learning curve
-    plot_learning_curve(date, num, data, experiment, learning_rate, weight_decay, dropout_Rates, train_loss_list, val_loss_list)
-    ### plot auc
-    plot_auc(date, num, data, experiment, learning_rate, weight_decay, dropout_Rates, train_auc_list, val_auc_list)
-    ### plot sparse ratio
-    layer2_sp_level_during_epoch = np.array(layer2_sp_level_during_epoch, dtype = np.float)
-    plot_remaining_ratio(date, num, data, experiment, learning_rate, weight_decay, dropout_Rates, layer2_sp_level_during_epoch)
+    test_pred_list = []
+    test_true_list = []
+    test_sample_weight_list = []
+    for test_x, test_y, test_w in test_dataloader:
+        test_pred, test_label, test_weight = opt_net(test_x, test_y, test_w)
+        test_pred_list.append(test_pred.reshape(-1,))
+        test_true_list.append(test_label.reshape(-1,))
+        test_sample_weight_list.append(test_weight.reshape(-1,))
+
+    test_pred_list = torch.cat(test_pred_list, dim = 0)
+    test_true_list = torch.cat(test_true_list, dim = 0)
+    test_sample_weight_list = torch.cat(test_sample_weight_list, dim = 0)
+    test_auc = auc(test_true_list, test_pred_list, test_sample_weight_list)
     
-    return final_auc
+    return test_auc
