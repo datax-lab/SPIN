@@ -6,6 +6,7 @@ from sklearn.utils import class_weight
 
 from SPIN_Train_Risk import train_SPIN
 from SPIN_Utils import *
+import argparse
 import os
 import warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
@@ -14,6 +15,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--gpu", type = str, help = "GPU number", required = True)
 parser.add_argument("--num", type = int, help = "The project number", required = True)
 parser.add_argument("--data", type = str, help = "Data name", required = True)
+parser.add_argument("--btch", type = int, help = "Batch Size", required=True)
+parser.add_argument("--init", type = str, help = "Initializer", default="he_normal")
+parser.add_argument("--act", type = str, help = "Activation", default="relu")
+parser.add_argument("--opt", type = str, help = "Optimizer", default="Adam")
+parser.add_argument("--dr", type = float, help = "Dropout", default=0.)
+parser.add_argument("--lr", type = float, help = "Learning rate", default=1e-3)
+parser.add_argument("--fac", type = float, help = "Learning rate factor", default=0.99)
+parser.add_argument("--pat", type = float, help = "Learning rate patience", default=0.99)
+parser.add_argument("--wd", type = float, help = "Weight Decay", default=1e-2)
 args = parser.parse_args()
 
 ### GPU assign
@@ -44,7 +54,7 @@ out_Nodes = 1
 ### Optimal Hyperparams Settings
 ### Obtained from HyperParams_Optimization.py
 net_hparams = [in_Nodes, [pathway_Nodes, hidden_Nodes], out_Nodes, args.init, args.act, args.dr] ### 0-input_nodes, 1-hidden_nodes, 2-output_nodes, 3-initializer, 4-activation, 5-dropout
-optim_hparams = [args.opt, args.lr, args.fac, 5, args.wd] ### 0-optimizer, 1-lr, 2-lr_factor, 3-lr_patience, 4-weight_decay
+optim_hparams = [args.opt, args.lr, args.fac, args.pat, args.wd] ### 0-optimizer, 1-lr, 2-lr_factor, 3-lr_patience, 4-weight_decay
 experim_hparms = [100, args.btch] ### 0-max_epoch, 1-batch_size
 ###################################################################################################################################
 ### Start SPIN
@@ -60,17 +70,14 @@ for experiment in range(1, n_experiments + 1):
     testLabel = pd.read_csv("Load Test Label")
     ###################################################################################################################################
     torch.cuda.empty_cache()
-    test_auc = train_SPIN(date, num, data, experiment, trainData, trainLabel, valData, valLabel, testData, testLabel,
-                          pathway_indices, in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes, dropout_Rates, initializer,
-                          activation, opt_lr, opt_wd, lr_factor, lr_patience, n_epoch, 
-                          step = step, optimizer = optimizer, learning_rate_scheduler = True)
+    test_auc = train_SPIN(date, num, data, experiment, trainData, trainLabel, validData, validLabel, testData, testLabel, pathway_idx, net_hparams, optim_hparams, experim_hparms)
 
     print("[%d] Test AUC: %.3f" % (experiment, test_auc))
-    record = open(save_path + f"Result/[{date}_{num}]_SPIN_[GSE{data}]_Result.txt", 'a+')
+    record = open("Save Test AUC", 'a+')
     record.write("[%d] Test AUC: %.3f\r\n" % (experiment, test_auc))
     record.close()
     test_auc_list.append(test_auc)
 
-record = open(save_path + f"Result/[{date}_{num}]_SPIN_[GSE{data}]_Result.txt", 'a+')
+record = open("Save Test AUC", 'a+')
 record.write("Average of AUC: %.3f\t\tStandard Deviation of AUC: %.4f\r\n" % (np.average(test_auc_list), np.std(test_auc_list)))
 record.close()
