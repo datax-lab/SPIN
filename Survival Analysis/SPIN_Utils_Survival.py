@@ -253,7 +253,7 @@ def neg_par_log_likelihood(pred, yevent, ytime):
     sum_diff_in_observed = torch.transpose(diff, 0, 1).mm(yevent)
     #print(sum_diff_in_observed)
     cost = (-(sum_diff_in_observed / n_observed)).reshape((-1,))
-    
+    cost = cost / ytime.shape[0]
     return cost
 
 def c_index(pred, yevent, ytime):
@@ -288,8 +288,5 @@ def c_index(pred, yevent, ytime):
     epsilon = torch.sum(ytime_matrix)
     ###c-index = numerator/denominator
     concordance_index = torch.div(concord, epsilon)
-    ###if gpu is being used
-    if torch.cuda.is_available():
-        concordance_index = concordance_index.cuda()
         
-    return concordance_index
+    return concordance_index.item()
