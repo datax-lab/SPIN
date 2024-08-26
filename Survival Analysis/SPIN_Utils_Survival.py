@@ -25,12 +25,6 @@ def load_sparse_indices(path):
 def load_data(path):
     return pd.read_csv(path)
 
-def upload_gpu(data, label):
-    x = torch.from_numpy(data.values).to(dtype = torch.float).cuda()
-    y = torch.from_numpy(label.values).to(dtype = torch.float).cuda()
-    
-    return x, y
-
 def fixed_s_mask(w, idx):
     '''
     Input: 
@@ -171,7 +165,7 @@ def small_net_mask(w, m_in_nodes, m_out_nodes):
     return sparse_bool_mask.to_dense().type(torch.uint8)
 
 '''Sparse coding phrase: optimize the connections between intermediate layers sequentially'''
-def sparse_func_survival(net, x_tr, yevent_tr, ytime_tr):
+def sparse_func_survival(net, dataloader):
     torch.cuda.empty_cache()
     ###serializing net 
     net_state_dict = net.state_dict()
@@ -198,10 +192,12 @@ def sparse_func_survival(net, x_tr, yevent_tr, ytime_tr):
             copy_state_dict[name].copy_(sp_param)
             torch.cuda.empty_cache()
             copy_net.train()
-            pred_tmp = copy_net(x_tr)
-            loss_tmp = neg_par_log_likelihood(pred_tmp, yevent_tr, ytime_tr)
-            S_loss.append(loss_tmp.cpu().detach().numpy())
-            
+            loss_tmp = 0
+            for x, e, t in dataloader:
+                pred, event, time = copy_net(x, e, t)
+                loss_tmp += neg_par_log_likelihood(pred, event, time).item()
+            loss_tmp /= len(dataloader)
+            S_loss.append(loss_tmp)            
         ### apply cubic interpolation
         best_S = get_best_sparsity(S_set, S_loss)
         optimal_sp_param = get_sparse_weight(copy_weight, active_mask, best_S)
