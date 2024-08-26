@@ -103,7 +103,7 @@ def train_SPIN(date, num, data, experiment, trainData, trainLabel, validData, va
     torch.save(opt_net, f"[{date}_{num}]_[{experiment}]Save_Opt_Model")
     ############################################################## Test ##############################################################
     test_sample_weight = pd.DataFrame(class_weight.compute_sample_weight('balanced', testLabel.values.ravel()))
-    test_dataloader = DataLoader(Load_Dataset(testData, testLabel, test_sample_weight), batch_size = experim_hparms[3], shuffle = False)
+    test_dataloader = DataLoader(Load_Dataset(testData, testLabel, test_sample_weight), batch_size = experim_hparms[1], shuffle = False)
     opt_net.eval()
     test_pred_list = []
     test_true_list = []
