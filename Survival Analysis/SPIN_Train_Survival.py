@@ -9,129 +9,105 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
-def train_SPIN(date, num, data, experiment, train_x, train_yevent, train_ytime, valid_x, valid_yevent, valid_ytime, 
-               test_x, test_yevent, test_ytime, pathway_indices,
-               in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes, dropout_Rates, initializer, activation,
-               learning_rate, weight_decay, lr_factor, lr_patience, n_epochs, 
-               step = 1, optimizer = "Adam", learning_rate_scheduler = False):
+class Load_Dataset(Dataset):
+    def __init__(self, data, event, time):
+        self.data = data
+        self.event = event
+        self.time = time
+
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        return torch.FloatTensor(self.data.iloc[idx]).cuda(), torch.FloatTensor(self.event.iloc[idx]).cuda(), torch.FloatTensor(self.time.iloc[idx]).cuda()
+
+def train_SPIN(date, num, data, experiment, trainData, trainEvent, trainTime, validData, validEvent, validTime, testData, testEvent, testTime, pathway_idx, net_hparams, optim_hparams, experim_hparms):
     ### set save path
     save_path = '''Set the path to save files & results'''
-    net = SPIN(in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes, pathway_indices, initializer, activation, dropout_Rates)
+    net = SPIN(net_hparams, pathway_idx)
     if torch.cuda.is_available():
         net.cuda()
-
     ### Optimizer Setting
-    if optimizer == "SGD":
-        opt = optim.SGD(net.parameters(), lr = learning_rate, weight_decay = weight_decay, nesterov = True)
-    elif optimizer == "Adam":
-        opt = optim.Adam(net.parameters(), lr = learning_rate, weight_decay = weight_decay, amsgrad = True)
-    elif optimizer == "AdamW":
-        opt = optim.AdamW(net.parameters(), lr = learning_rate, weight_decay = weight_decay, amsgrad = True)
-        
-    if learning_rate_scheduler:
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', factor = lr_factor, patience = lr_patience)
-###################################################################################################################################
+    ### 0-optimizer, 1-lr, 2-lr_scheduler, 3-lr_factor, 4-lr_patience
+    if optim_hparams[0] == "SGD":
+        opt = optim.SGD(net.parameters(), lr = optim_hparams[1], momentum = 1e-1, dampening = 0, weight_decay = optim_hparams[4], nesterov = True)
+    elif optim_hparams[0] == "Adam":
+        opt = optim.Adam(net.parameters(), lr = optim_hparams[1], betas = (0.99, 0.999), eps = 1e-8, weight_decay = optim_hparams[4], amsgrad = True)
+    elif optim_hparams[0] == "AdamW":
+        opt = optim.AdamW(net.parameters(), lr = optim_hparams[1], betas = (0.99, 0.999), eps = 1e-8, weight_decay = optim_hparams[4], amsgrad = True)
+    ### Learning scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, 'min', factor = optim_hparams[2], patience = optim_hparams[3])
+    ###############################################################################################################################################
+    ### Load Dataset
+    train_dataloader = DataLoader(Load_Dataset(trainData, trainEvent, trainTime), batch_size = experim_hparms[1], shuffle = False)
+    valid_dataloader = DataLoader(Load_Dataset(validData, validEvent, validTime), batch_size = experim_hparms[1], shuffle = False)
+    ###############################################################################################################################################
     train_loss_list = []
     val_loss_list = []
-    train_cindex_list = []
-    val_cindex_list = []
-    
     layer2_sp_level_during_epoch = []
-    best_val_loss = np.inf
-    best_val_loss_epoch = step
-    val_cindex_at_best_val_loss = 0.
-    best_val_cindex = 0.
-###################################################################################################################################
-    for epoch in tqdm(range(1, n_epochs + 1)):
+    ###################################################################################################################################
+    for epoch in range(1, experim_hparms[0] + 1):
         torch.cuda.empty_cache()
         net.train()
-        ### forward
-        pred = net(train_x)
-        ### calculate loss
-        loss = neg_par_log_likelihood(pred, train_yevent, train_ytime)
-        ### reset gradients to zeros
-        opt.zero_grad()
-        ### calculate gradients
-        loss.backward()
-        ### force the connections between gene layer and pathway layer w.r.t. 'pathway_mask'
-        if net.layer1_female.weight.grad is not None:
-            net.layer1_female.weight.grad = fixed_s_mask(net.layer1_female.weight.grad, pathway_indices)
-        if net.layer1_male.weight.grad is not None:
-            net.layer1_male.weight.grad = fixed_s_mask(net.layer1_male.weight.grad, pathway_indices)
-        ### update weights and biases
-        opt.step()
-###################################################################################################################################
+        train_step_loss = []
+        for train_x, train_event, train_time in train_dataloader:
+            ### forward
+            train_pred, train_yevent, train_ytime = net(train_x, train_event, train_time)
+            ### calculate loss
+            loss = neg_par_log_likelihood(train_pred, train_yevent, train_ytime)
+            ### reset gradients to zeros
+            opt.zero_grad()
+            ### calculate gradients
+            loss.backward()
+            ### force the connections between gene layer and pathway layer w.r.t. 'pathway_mask'
+            if net.layer1_female.weight.grad is not None:
+                net.layer1_female.weight.grad = fixed_s_mask(net.layer1_female.weight.grad, pathway_idx)
+            if net.layer1_male.weight.grad is not None:
+                net.layer1_male.weight.grad = fixed_s_mask(net.layer1_male.weight.grad, pathway_idx)
+            ### update weights and biases
+            opt.step()
+            ### append train loss per step
+            train_step_loss.append(loss.item())
+        ###################################################################################################################################
+        train_loss = np.mean(train_step_loss)
         ### sparse network - prunning connections
-        net, sp_level_list = sparse_func_survival(net, train_x, train_yevent, train_ytime)
-        layer2_sp_level_during_epoch.append(float(sp_level_list[0][1]))
+        net, sp_level_list = sparse_func_risk(net, train_dataloader)
+        layer2_sp_level_during_epoch.append(sp_level_list[0][1])
         del sp_level_list
         gc.collect()
-        
-        if epoch % step == 0:
-            torch.cuda.empty_cache()
-            net.train()
-            train_pred = net(train_x)
-            train_loss = neg_par_log_likelihood(train_pred, train_yevent, train_ytime).view(1,)
-            train_loss_list.append(train_loss)
-            train_cindex = c_index(train_pred, train_yevent, train_ytime)
-            train_cindex_list.append(train_cindex)
-###################################################################################################################################
-            net.eval()
-            ### validation data
-            with torch.no_grad():
-                val_pred = net(valid_x)
-                val_loss = neg_par_log_likelihood(val_pred, valid_yevent, valid_ytime).cpu().detach().numpy()
-                if np.isnan(val_loss):
-                    val_loss = np.inf
-                val_loss_list.append(val_loss)
-                val_cindex = c_index(val_pred, valid_yevent, valid_ytime)
-                val_cindex_list.append(val_cindex)
-###################################################################################################################################
-            ### adjust learning rate based on validation loss
-            if learning_rate_scheduler:
-                scheduler.step(val_loss)            
-            ### update best cindex and ratio at best cindex
-            if best_val_cindex < val_cindex:
-                best_val_cindex = val_cindex
-                best_val_cindex_epoch = epoch
-                
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_val_loss_epoch = epoch
-                val_auc_at_best_val_loss = val_auc
-                opt_net = copy.deepcopy(net)
-                print("[%d] Train Loss in [%d]: %.4f" % (experiment, epoch, train_loss))
-                print("[%d] Valid Loss in [%d]: %.4f" % (experiment, epoch, val_loss))
-                print("[%d] Train C-Index in [%d]: %.3f" % (experiment, epoch, train_cindex))
-                print("[%d] Valid C-Index in [%d]: %.3f" % (experiment, epoch, val_cindex))
-                print("[%d] Best Valid C-Index in [%d]: %.3f" % (experiment, best_val_cindex_epoch, best_val_cindex))
-            else:
-                print("[%d] Train Loss in [%d]: %.4f" % (experiment, epoch, train_loss))
-                print("[%d] Valid Loss in [%d]: %.4f" % (experiment, epoch, val_loss))
-                print("[%d] Train C-Index in [%d]: %.3f" % (experiment, epoch, train_cindex))
-                print("[%d] Valid C-Index in [%d]: %.3f" % (experiment, epoch, val_cindex))
-                print("[%d] Best Valid Loss in [%d]: %.4f" % (experiment, best_val_loss_epoch, best_val_loss))
-                print("[%d] Valid C-Index at Best Valid Loss in [%d]: %.3f" % (experiment, best_val_loss_epoch, val_cindex_at_best_val_loss))
-                print("[%d] Best Valid C-Index in [%d]: %.3f" % (experiment, best_val_cindex_epoch, best_val_cindex))
-                
-            del train_pred, val_pred, train_loss, val_loss
-            del train_cindex, val_cindex
-            gc.collect()
+        ###################################################################################################################################
+        net.eval()
+        ### validation data
+        valid_loss = 0
+        with torch.no_grad():
+            for valid_x, valid_event, valid_time in valid_dataloader:
+                valid_pred, valid_yevent, valid_ytime = net(valid_x, valid_event, valid_time)
+                valid_loss += neg_par_log_likelihood(valid_pred, valid_yevent, valid_ytime).item()
+        valid_loss /= len(valid_dataloader)
+        ### adjust learning rate based on validation loss
+        scheduler.step(valid_loss)
+        ### save the optimal model at the best validation loss
+        best_valid_loss = float("inf")
+        if valid_loss < best_valid_loss:
+            best_valid_loss = valid_loss
+            opt_net = copy.deepcopy(net)
             
-    torch.save(opt_net, save_path + f"Saved_Model/[{date}_{num}]_[{experiment}]_Opt_Model.pt")
-############################################################## Test ##############################################################
+    torch.save(opt_net, f"[{date}_{num}]_[{experiment}]Save_Opt_Model")
+    ############################################################## Test ##############################################################
+    test_dataloader = DataLoader(Load_Dataset(testData, testEvent, testTime), batch_size = experim_hparms[1], shuffle = False)
     opt_net.eval()
-    final_pred = opt_net(test_x)
-    final_cindex = c_index(final_pred, test_yevent, test_ytime)
-    ### save ground truth & prediction of test data
-    pd.DataFrame(np.concatenate(([final_pred.cpu().detach().numpy().ravel()], [test_yevent.cpu().detach().numpy().ravel()], [test_ytime.cpu().detach().numpy().ravel()]), axis = 0).T).to_csv(save_path + f"Pred_&_Truth/[{date}_{num}]_[{experiment}]_Cox-SPIN_Pred_Truth.csv", index = False)
-###################################################################################################################################
-    ### plot learning curve
-    plot_learning_curve(date, num, data, experiment, learning_rate, weight_decay, dropout_Rates, train_loss_list, val_loss_list)
-    ### plot c-index
-    plot_cindex(date, num, data, experiment, learning_rate, weight_decay, dropout_Rates, train_cindex_list, val_cindex_list)
-    ### plot sparse ratio
-    layer2_sp_level_during_epoch = np.array(layer2_sp_level_during_epoch, dtype = np.float)
-    plot_remaining_ratio(date, num, data, experiment, learning_rate, weight_decay, dropout_Rates, layer2_sp_level_during_epoch)
+    test_pred_list = []
+    test_event_list = []
+    test_time_list = []
+    for test_x, test_event, test_time in test_dataloader:
+        test_pred, test_yevent, test_ytime = opt_net(test_x, test_event, test_time)
+        test_pred_list.append(test_pred.reshape(-1,))
+        test_event_list.append(test_yevent.reshape(-1,))
+        test_time_list.append(test_ytime.reshape(-1,))
+
+    test_pred_list = torch.cat(test_pred_list, dim = 0)
+    test_event_list = torch.cat(test_event_list, dim = 0)
+    test_time_list = torch.cat(test_time_list, dim = 0)
+    test_cindex = c_index(test_pred_list, test_event_list, test_time_list)
     
-    return final_cindex.cpu().detach().numpy()
+    return test_cindex
