@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--gpu", type = str, help = "GPU number", required = True)
 parser.add_argument("--num", type = int, help = "The project number", required = True)
 parser.add_argument("--data", type = str, help = "Data name", required = True)
+parser.add_argument("--epoch", type = int, help = "Epoch Size", required=True)
 parser.add_argument("--btch", type = int, help = "Batch Size", required=True)
 parser.add_argument("--init", type = str, help = "Initializer", default="he_normal")
 parser.add_argument("--act", type = str, help = "Activation", default="relu")
@@ -50,12 +51,13 @@ elif data == "172367":
 pathway_Nodes = 173
 hidden_Nodes = 100
 out_Nodes = 1
+n_experiments = 10
 ###################################################################################################################################
 ### Optimal Hyperparams Settings
 ### Obtained from HyperParams_Optimization.py
 net_hparams = [in_Nodes, [pathway_Nodes, hidden_Nodes], out_Nodes, args.init, args.act, args.dr] ### 0-input_nodes, 1-hidden_nodes, 2-output_nodes, 3-initializer, 4-activation, 5-dropout
 optim_hparams = [args.opt, args.lr, args.fac, args.pat, args.wd] ### 0-optimizer, 1-lr, 2-lr_factor, 3-lr_patience, 4-weight_decay
-experim_hparms = [100, args.btch] ### 0-max_epoch, 1-batch_size
+experim_hparms = [args.epoch, args.btch] ### 0-max_epoch, 1-batch_size
 ###################################################################################################################################
 ### Start SPIN
 test_auc_list = []
