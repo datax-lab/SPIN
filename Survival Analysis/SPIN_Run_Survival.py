@@ -73,18 +73,10 @@ for experiment in range(1, n_experiments + 1):
     trainData, trainEvent, trainTime = load_data("Load Train Dataset")
     validData, validEvent, validTime = load_data("Load Valid Dataset")
     testData, testEvent, testTime = load_data("Load Test Dataset")
-### Start SPIN
-test_cindex_list = []
-for experiment in range(1, n_experiments + 1):
-    print("#######################  %d experiment  #######################\n" % experiment)
-    ### load train & validation & test data and label
-    tcga_tr_x, tcga_tr_yevent, tcga_tr_ytime = load_data(data_path + f"TCGA_{data}_Train_{experiment}.csv")
-    tcga_val_x, tcga_val_yevent, tcga_val_ytime = load_data(data_path + f"TCGA_{data}_Valid_{experiment}.csv")
-    tcga_ts_x, tcga_ts_yevent, tcga_ts_ytime = load_data(data_path + f"TCGA_{data}_Test_{experiment}.csv")
     ###################################################################################################################################
     torch.cuda.empty_cache()
-    test_cindex = train_SPIN(date, num, data, experiment, trainData, trainLabel, validData, validLabel, testData, testLabel, pathway_idx, net_hparams, optim_hparams, experim_hparms)
-
+    test_cindex = train_SPIN(date, num, data, experiment, trainData, trainEvent, trainTime, validData, validEvent, validTime, testData, testEvent, testTime, pathway_idx, net_hparams, optim_hparams, experim_hparms)
+    ###################################################################################################################################
     print("[%d] Test C-Index: %.3f" % (experiment, test_cindex))
     record = open("Save Test C-Index", 'a+')
     record.write("[%d] Test C-Index: %.3f\r\n" % (experiment, test_cindex))
