@@ -14,7 +14,6 @@ import gc
 
 import torch.nn as nn
 import torch.nn.functional as F
-from Survival_CostFunc import neg_par_log_likelihood
 
 def load_sparse_indices(path):
 
@@ -25,12 +24,6 @@ def load_sparse_indices(path):
 
 def load_data(path):
     return pd.read_csv(path)
-
-def upload_gpu(data, label):
-    x = torch.from_numpy(data.values).to(dtype = torch.float).cuda()
-    y = torch.from_numpy(label.values).to(dtype = torch.float).cuda()
-    
-    return x, y
 
 def fixed_s_mask(w, idx):
     '''
@@ -172,7 +165,7 @@ def small_net_mask(w, m_in_nodes, m_out_nodes):
     return sparse_bool_mask.to_dense().type(torch.uint8)
 
 '''Sparse coding phrase: optimize the connections between intermediate layers sequentially'''
-def sparse_func(net, x_tr, y_tr):
+def sparse_func(net, dataloader):
     torch.cuda.empty_cache()
     ###serializing net 
     net_state_dict = net.state_dict()
@@ -203,10 +196,12 @@ def sparse_func(net, x_tr, y_tr):
             copy_state_dict[name].copy_(sp_param)
             torch.cuda.empty_cache()
             copy_net.train()
-            pred_tmp = copy_net(x_tr)
-            loss_tmp = F.binary_cross_entropy(pred_tmp, y_tr, weight = gpu_tr_sample_weight)
-            S_loss.append(loss_tmp.cpu().detach().numpy())
-            
+            loss_tmp = 0
+            for x, y, w in dataloader:
+                pred, label, sample_weight = copy_net(x, y, w)
+                loss_tmp += F.binary_cross_entropy(pred, label, weight = sample_weight).item()
+            loss_tmp /= len(dataloader)
+            S_loss.append(loss_tmp)
         ### apply cubic interpolation
         best_S = get_best_sparsity(S_set, S_loss)
         optimal_sp_param = get_sparse_weight(copy_weight, active_mask, best_S)
