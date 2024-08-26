@@ -13,6 +13,16 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--gpu", type = str, help = "GPU number", required = True)
 parser.add_argument("--num", type = int, help = "The project number", required = True)
 parser.add_argument("--data", type = str, help = "Data name", required = True)
+parser.add_argument("--epoch", type = int, help = "Epoch Size", required=True)
+parser.add_argument("--btch", type = int, help = "Batch Size", required=True)
+parser.add_argument("--init", type = str, help = "Initializer", default="he_normal")
+parser.add_argument("--act", type = str, help = "Activation", default="relu")
+parser.add_argument("--opt", type = str, help = "Optimizer", default="Adam")
+parser.add_argument("--dr", type = float, help = "Dropout", default=0.)
+parser.add_argument("--lr", type = float, help = "Learning rate", default=1e-3)
+parser.add_argument("--fac", type = float, help = "Learning rate factor", default=0.99)
+parser.add_argument("--pat", type = float, help = "Learning rate patience", default=0.99)
+parser.add_argument("--wd", type = float, help = "Weight Decay", default=1e-2)
 args = parser.parse_args()
 
 ### GPU assign
@@ -32,46 +42,37 @@ save_path = '''Set the path to save files & results'''
 ### Net setting
 if data == "LIHC":
     in_Nodes = 4360
-    pathway_indices = load_sparse_indices(data_path + f"TCGA_{data}_Pathway_Mask.npz")
+    pathway_idx = load_sparse_indices("Load Pathway Mask")
 elif data == "STAD":
     in_Nodes = 4369
-    pathway_indices = load_sparse_indices(data_path + f"TCGA_{data}_Pathway_Mask.npz")
+    pathway_idx = load_sparse_indices("Load Pathway Mask")
 elif data == "LUAD":
     in_Nodes = 4365
-    pathway_indices = load_sparse_indices(data_path + f"TCGA_{data}_Pathway_Mask.npz")
+    pathway_idx = load_sparse_indices("Load Pathway Mask")
 elif data == "LUSC":
     in_Nodes = 4366
-    pathway_indices = load_sparse_indices(data_path + f"TCGA_{data}_Pathway_Mask.npz")
+    pathway_idx = load_sparse_indices("Load Pathway Mask")
 elif data == "GBM_&_LGG":
     in_Nodes = 4350
-    pathway_indices = load_sparse_indices(data_path + f"TCGA_{data}_Pathway_Mask.npz")
+    pathway_idx = load_sparse_indices("Load Pathway Mask")
     
 pathway_Nodes = 173
 hidden_Nodes = 100
 out_Nodes = 1
-###################################################################################################################################
-### Initialize Settings
-initializer = "he_uniform"
-activation = "Relu"
-dropout_Rates = 0.7
-optimizer = "Adam"
-opt_lr = '''Set the optimal learning rate'''
-opt_wd = '''Set the optimal weight decay'''
-lr_factor = '''Set the learning rate scheduler factor'''
-lr_patience = '''Set the learning rate scheduler patientce'''
-step = 10
 n_experiments = 10
-n_epoch = 5000
 ###################################################################################################################################
-### Record Settings
-record = open(save_path + f"Result/[{date}_{num}]_SPIN_[TCGA_{data}]_Result.txt", 'a+')
-record.write("Input Nodes: %d\t\tPathway Nodes: %d\t\tHidden Nodes: %s\t\tOutput Nodes: %d\r\n" % (in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes))
-record.write("Initializer: %s\t\tActivation: %s\t\tDropout Rates: %s\t\tOptimizer: %s\r\n" % (initializer, activation, str(dropout_Rates), optimizer))
-record.write("Init LR: %s\t\tWeight Decay: %s\r\n" % (opt_lr, opt_wd))
-record.write("Epoch: %d\t\tStep Size: %d\r\n" % (eval_epoch, step))
-record.write("LR Factor: %s\t\tLR Patience: %s\r\n" % (lr_factor, lr_patience))
-record.close()
+### Optimal Hyperparams Settings
+### Obtained from HyperParams_Optimization.py
+net_hparams = [in_Nodes, [pathway_Nodes, hidden_Nodes], out_Nodes, args.init, args.act, args.dr] ### 0-input_nodes, 1-hidden_nodes, 2-output_nodes, 3-initializer, 4-activation, 5-dropout
+optim_hparams = [args.opt, args.lr, args.fac, args.pat, args.wd] ### 0-optimizer, 1-lr, 2-lr_factor, 3-lr_patience, 4-weight_decay
+experim_hparms = [args.epoch, args.btch] ### 0-max_epoch, 1-batch_size
 ###################################################################################################################################
+### Start SPIN
+test_cindex_list = []
+for experiment in range(1, n_experiments + 1):
+    trainData, trainEvent, trainTime = load_data("Load Train Dataset")
+    validData, validEvent, validTime = load_data("Load Valid Dataset")
+    testData, testEvent, testTime = load_data("Load Test Dataset")
 ### Start SPIN
 test_cindex_list = []
 for experiment in range(1, n_experiments + 1):
@@ -80,21 +81,16 @@ for experiment in range(1, n_experiments + 1):
     tcga_tr_x, tcga_tr_yevent, tcga_tr_ytime = load_data(data_path + f"TCGA_{data}_Train_{experiment}.csv")
     tcga_val_x, tcga_val_yevent, tcga_val_ytime = load_data(data_path + f"TCGA_{data}_Valid_{experiment}.csv")
     tcga_ts_x, tcga_ts_yevent, tcga_ts_ytime = load_data(data_path + f"TCGA_{data}_Test_{experiment}.csv")
-###################################################################################################################################
+    ###################################################################################################################################
     torch.cuda.empty_cache()
-    test_cindex = train_SPIN(date, num, data, experiment, tcga_tr_x, tcga_tr_yevent, tcga_tr_ytime,
-                          tcga_val_x, tcga_val_yevent, tcga_val_ytime,
-                          tcga_ts_x, tcga_ts_yevent, tcga_ts_ytime, pathway_indices,
-                          in_Nodes, pathway_Nodes, hidden_Nodes, out_Nodes, dropout_Rates, initializer,
-                          activation, opt_lr, opt_wd, lr_factor, lr_patience, n_epoch, 
-                          step = step, optimizer = optimizer, learning_rate_scheduler = True)
+    test_cindex = train_SPIN(date, num, data, experiment, trainData, trainLabel, validData, validLabel, testData, testLabel, pathway_idx, net_hparams, optim_hparams, experim_hparms)
 
     print("[%d] Test C-Index: %.3f" % (experiment, test_cindex))
-    record = open(save_path + f"Result/[{date}_{num}]_SPIN_[TCGA_{data}]_Result.txt", 'a+')
+    record = open("Save Test C-Index", 'a+')
     record.write("[%d] Test C-Index: %.3f\r\n" % (experiment, test_cindex))
     record.close()
     test_cindex_list.append(test_cindex)
 
-record = open(save_path + f"Result/[{date}_{num}]_SPIN_[TCGA_{data}]_Result.txt", 'a+')
+record = open("Save Test C-Index", 'a+')
 record.write("Average of C-Index: %.3f\t\tStandard Deviation of C-Index: %.4f\r\n" % (np.average(test_cindex_list), np.std(test_cindex_list)))
 record.close()
